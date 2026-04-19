@@ -1,0 +1,48 @@
+steps:
+  # 1. Docker 이미지 빌드
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA'
+      - '.'
+
+  # 2. Artifact Registry에 이미지 푸시
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA'
+
+  # 3. Cloud Run 배포 (VPC 및 환경변수 포함)
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - '$_SERVICE_NAME'
+      - '--image'
+      - '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA'
+      - '--region'
+      - '$_REGION'
+      - '--allow-unauthenticated'
+      - '--port'
+      - '3000' # NestJS 기본 포트
+      # 🚀 [백엔드 전용 핵심 설정] 🚀
+      - '--vpc-connector'
+      - '$_VPC_CONNECTOR'
+      - '--set-env-vars'
+      - 'DB_HOST=$_DB_HOST,DB_USER=$_DB_USER' # 패스워드는 나중에 Secret Manager로 고도화 추천!
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+images:
+  - '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA'
+
+substitutions:
+  _REGION: 'asia-northeast1'
+  _REPO_NAME: 'dev-repo'
+  _SERVICE_NAME: 'gcp-cloudrun-be' # 백엔드 서비스 이름
+  _VPC_CONNECTOR: 'my-vpc-connector' # 연결할 VPC 커넥터 이름 (수정 필요)
+  _DB_HOST: '10.x.x.x'               # MariaDB 내부 IP (수정 필요)
+  _DB_USER: 'db_admin'               # DB 계정명 (수정 필요)
